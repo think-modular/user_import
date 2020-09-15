@@ -1,0 +1,14 @@
+{
+  "name": "drupal/user_registration",
+  "description": "The simple Drupal module to import user from CSV",
+  "type": "drupal-module",
+  "homepage": "https://drupal.org/project/user_registration",
+  "authors": [
+    {
+      "name": "Infowind",
+      "homepage": "https://drupal8.framework.infowindtech.biz/",
+      "role": "Author"
+    }
+  ],
+  "license": "GPL-2.0+"
+}

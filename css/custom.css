@@ -1,0 +1,11 @@
+#edit-actions {
+  display: none;
+}
+#user_import_fields_change_wrapper {
+  float: left !important;
+}
+
+.csv_column_text {
+	border: none;
+	background: none;
+}

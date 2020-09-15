@@ -1,0 +1,39 @@
+user_import.admin_settings:
+  path: '/admin/config/content/user_import'
+  defaults:
+    _form: 'Drupal\user_import\Form\UserImport'
+    _title: 'User Import'
+  requirements:
+    _permission: 'administer user import'
+
+
+user_import.multistep_one:
+  path: '/user_import/new-import'
+  defaults:
+    _form: '\Drupal\user_import\Form\Multistep\MultistepOneForm'
+    _title: 'New import form'
+  requirements:
+    _permission: 'view user import form'
+user_import.multistep_two:
+  path: '/user_import/new-import/add'
+  defaults:
+    _form: '\Drupal\user_import\Form\Multistep\MultistepTwoForm'
+    _title: 'Preview form'
+  requirements:
+    _permission: 'view user import form'
+
+
+user_import.testmultistep_one:
+  path: '/user_import/test-new-import'
+  defaults:
+    _form: '\Drupal\user_import\Form\TestMultistep\MultistepOneForm'
+    _title: 'Test new import form'
+  requirements:
+    _permission: 'view user import form'
+user_import.testmultistep_two:
+  path: '/user_import/test-new-import/add'
+  defaults:
+    _form: '\Drupal\user_import\Form\TestMultistep\MultistepTwoForm'
+    _title: 'Test preview form'
+  requirements:
+    _permission: 'view user import form'           

@@ -1,0 +1,4 @@
+administer user import:
+  title: 'Administer user import'
+view user import form:
+  title: 'View user import form'   
