@@ -1,6 +1,6 @@
-SUMMARY - User Import
+SUMMARY - Bulk user registration
 =================================
-To import content for Import User registration and update from CSV file
+To import content for User register or import from CSV file
 
 REQUIREMENTS
 ------------
@@ -16,16 +16,16 @@ Refer the example given in the module folder CSV_article.csv file
 INSTALLATION
 -------------
 Install this module as usual. Please see
-Paste Module Link Here
+http://drupal.org/documentation/install/modules-themes/modules-8
 
 CONFIGURATION
 -------------
 
-After successfully installing the module user import,
+After successfully installing the module bulk user import or registration,
 you can import user data for the selected role type via
 file import.
 
-Install the module user_import.
+Install the module bulk_user_registration.
 
 Go to Configuration and select User import from
 Content Authoring.
@@ -63,9 +63,4 @@ role -> auto assign user role
 Check the attached CSV file for Sample.
 
 Click on Import which redirects you to admin/content
-
-
-Permission
-==============
-If you want to upload csv file for authenticate user also. Please give permission to access the user import form from admin permission tab.
 

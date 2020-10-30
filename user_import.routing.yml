@@ -36,4 +36,20 @@ user_import.testmultistep_two:
     _form: '\Drupal\user_import\Form\TestMultistep\MultistepTwoForm'
     _title: 'Test preview form'
   requirements:
-    _permission: 'view user import form'           
+    _permission: 'view user import form'
+user_import.autocomplete:
+  path: '/user_import/autocomplete'
+  defaults:
+    _controller: '\Drupal\user_import\Controller\AutoCompleteController::handleAutocomplete'
+    _format: json
+  requirements:
+    _permission: 'access content'
+
+
+user_import.batch_form:
+  path: '/user_import/batch-form'
+  defaults:
+    _form: '\Drupal\user_import\Form\BatchExampleForm'
+    _title: 'New import form'
+  requirements:
+    _permission: 'access content'   

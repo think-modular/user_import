@@ -51,4 +51,3 @@ function user_import_mail($key, &$message, $params) {
       break;
   }
 }
-

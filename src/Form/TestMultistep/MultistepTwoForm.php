@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @file
  * Contains \Drupal\user_import\Form\TestMultistep\MultistepTwoForm.
@@ -18,923 +19,868 @@ use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\profile\Entity\Profile;
 use Drupal\Core\Database\Database;
 use Drupal\file\Entity\File;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Entity\Element\EntityAutocomplete;
+use Drupal\Core\Form\FormBase;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
-class MultistepTwoForm extends MultistepFormBase
-{
-    /**
-     * {@inheritdoc}.
-     */
-    public function getFormId()
-    {
-        return 'multistep_form_two';
-    }
 
-    /**
-     * {@inheritdoc}.
-     */
-    public function buildForm(array $form, FormStateInterface $form_state)
-    {
-        $file_data = $this
-            ->store
-            ->get('file_data');
-        $list_of_roles = user_role_names();
-        $csv_column_array = [];
 
-        foreach ($file_data[0] as $key => $user_value) {
-            $csv_column_array[] = $user_value;
-        }
+class MultistepTwoForm extends MultistepFormBase {
 
-        $csv_column_count = count($csv_column_array);
-        $form = parent::buildForm($form, $form_state);
+	/**
+   	* {@inheritdoc}.
+   	*/
+	public function getFormId() {
+		return 'multistep_form_two';
+  	}
 
-        $moduleHandler = \Drupal::service('module_handler');
-        if ($moduleHandler->moduleExists('group')) {
-            $database = \Drupal::database();
-            $query = $database->query("SELECT * FROM groups_field_data");
-            $group_result = $query->fetchAll();
-            if (count($group_result) > 0) {
-                $form['group'] = array(
-                    '#type' => 'details',
-                    '#title' => $this->t('GROUPS') ,
-                    '#description' => $this->t("Select any group to add users.") ,
-                    '#open' => true
-                );
+  	/**
+   	* {@inheritdoc}.
+   	*/
+	public function buildForm(array $form, FormStateInterface $form_state) {
 
-                $group_listing = [];
+	  	$file_data = $this->store->get('file_data');
 
-                foreach ($group_result as $key => $group) {
-                    $group_listing[0] = t('------------------');
-                    $current_user = \Drupal::currentUser();
-                    $group_load = \Drupal\group\Entity\Group::load($group->id);
-                    if ($group_load->getMember($current_user)) {
-                        $group_listing[$group->id] = $group->label;
-                    }
-                }
+	  	$list_of_roles = user_role_names();
+	    $csv_column_array = [];
 
-                $form['group']['add_group'] = array(
-                    '#type' => 'select',
-                    '#title' => t('Select group') ,
-                    '#default_value' => 0,
-                    '#options' => $group_listing,
-                    '#ajax' => ['event' => 'change',
-                    'callback' => '::userImportcallback',
-                    'wrapper' => 'user_import_fields_change_wrapper',
-                    'progress' => ['type' => 'throbber',
-                    'message' => $this->t('Verifying permission...') ,
-                    ],
-                    ],
-                );
-                $form['group']['add_role'] = array(
-                    '#type' => 'select',
-                    '#title' => $this->t('Select role/roles') ,
-                    '#prefix' => '<div id="first">',
-                    '#suffix' => '</div>',
-                    '#default_value' => 0,
-                    '#validated' => true,
-                    '#options' => array(
-                        0 => '------------------'
-                    ) ,
-                );
-                $form['group']['import_ct_markup'] = ['#suffix' => '<div id="user_import_fields_change_wrapper"></div>', ];
-            }
-        }
+	    foreach ($file_data[0] as $key => $user_value) {
+	    	$csv_column_array[] = $user_value;
+	    }
 
-        if ($moduleHandler->moduleExists('profile')) {
-            $database = \Drupal::database();
-            $profile_type_query = $database->query("SELECT value FROM key_value WHERE collection LIKE '%profile%'");
-            $profile_type_result = $profile_type_query->fetchAll();
-            $profile_type = array();
+	    $form = parent::buildForm($form, $form_state);
 
-            foreach ($profile_type_result as $key => $type) {
-                $profile_type_value = unserialize($profile_type_result[$key]->value);
-                $explode_dot_profile = explode('.', $profile_type_value[0]);
-                $profile_type[0] = $this->t('---------------');
-                $profile_type[$explode_dot_profile[2]] = $explode_dot_profile[2];
-            }
+	    $moduleHandler = \Drupal::service('module_handler');
+		if ($moduleHandler->moduleExists('group')){
 
-            $form['profile_type_field'] = array(
-                '#type' => 'details',
-                '#title' => $this->t('PROFILE TYPES') ,
-                '#description' => $this->t('When you mapping profile fields, it must be within the profile type.') ,
-                '#open' => true
-            );
-            // Add the headers.
-            $form['profile_type_field']['profile_csv_user_column'] = array(
-                '#type' => 'table',
-                '#title' => 'Sample Table',
-                '#header' => array(
-                    'CSV COLUMN',
-                    'PROFILE TYPE'
-                ) ,
-            );
+			$database = \Drupal::database();
+			$query = $database->query("SELECT * FROM groups_field_data");
+			$group_result = $query->fetchAll();
 
-            foreach ($file_data[0] as $key => $user_value) {
-                if (strpos($user_value, 'field_') !== false) {
-                    $form['profile_type_field']['profile_csv_user_column'][$key]['profile_csv_column'] = array(
-                        '#type' => 'textfield',
-                        '#title' => t('CSV COLUMN'),
-                        '#title_display' => 'invisible',
-                        '#default_value' => $user_value,
-                        '#size' => 20,
-                        '#attributes' => array(
-                            'disabled' => 'disabled',
-                            'class' => array(
-                                'csv_column_text'
-                            )
-                        ) ,
-                    );
-                    $form['profile_type_field']['profile_csv_user_column'][$key]['profile_field'] = array(
-                        '#type' => 'select',
-                        '#title' => t('PROFILE TYPE') ,
-                        '#title_display' => 'invisible',
-                        '#default_value' => 0,
-                        '#options' => $profile_type
-                    );
-                }
-            }
-        }
-        $form['field_match'] = array(
-            '#type' => 'details',
-            '#title' => $this->t('FIELD MATCH') ,
-            '#description' => $this->t("<ul><li><b>Drupal fields</b>: Match columns in CSV file to drupal user fields, leave as '----' to ignore the column.</li><li><b>Username</b>: If username is selected for multiple fields, the username will be built in the order selected. Otherwise, the name will be username.</li><li><b>Abbreviate</b>: Use the first letter of a field in uppercase for the Username, e.g. 'john' -> 'J'.</li><ul>") ,
-            '#open' => true
-        );
-        $form['field_match']['csv_column_count'] = array(
-            '#type' => 'hidden',
-            '#title' => 'Sample Column',
-            '#title_display' => 'invisible',
-            '#default_value' => $csv_column_count,
-        );
-        $form['field_match']['csv_file_data'] = array(
-            '#type' => 'hidden',
-            '#title' => 'Sample Column',
-            '#title_display' => 'invisible',
-            '#value' => array(
-                'csv_file_data' => $file_data
-            ) ,
-        );
-        // Add the headers.
-        $form['field_match']['csv_user_column'] = array(
-            '#type' => 'table',
-            '#title' => 'Sample Table',
-            '#header' => array(
-                'CSV COLUMN',
-                'DRUPAL FIELDS',
-                'USERNAME',
-                'ABBREVIATE'
-            ) ,
-        );
+			if(count($group_result) > 0){
+				$form['group'] = array(
+				    '#type' => 'details',
+				    '#title' => $this->t('GROUPS'),
+				    '#description' => $this->t("Select any group to add users."),
+				    '#open' => TRUE
+			    );
 
-        // Add input fields in table cells.
-        foreach ($file_data[0] as $key => $user_value) {
-            if (strpos($user_value, 'field_') !== false) {
-            } else {
-                $form['field_match']['csv_user_column'][$key]['csv_column'] = array(
-                    '#type' => 'textfield',
-                    '#title' => t('CSV COLUMN') ,
-                    '#title_display' => 'invisible',
-                    '#default_value' => $user_value,
-                    '#size' => 20,
-                    '#attributes' => array(
-                        'disabled' => 'disabled',
-                        'class' => array(
-                            'csv_column_text'
-                        )
-                    ) ,
-                );
-                $form['field_match']['csv_user_column'][$key]['drupal_fields'] = array(
-                    '#type' => 'select',
-                    '#title' => t('DRUPAL FIELDS') ,
-                    '#title_display' => 'invisible',
-                    '#default_value' => 0,
-                    '#options' => array(
-                        0 => t('-------------------') ,
-                        1 => t('Account Creation Date') ,
-                        2 => t('Email Address*') ,
-                        3 => t('Password') ,
-                        4 => t('Roles')
-                    )
-                );
-                $form['field_match']['csv_user_column'][$key]['username'] = array(
-                    '#type' => 'select',
-                    '#title' => t('USERNAME') ,
-                    '#title_display' => 'invisible',
-                    '#default_value' => 0,
-                    '#options' => array(
-                        0 => t('--') ,
-                        1 => t('1') ,
-                        2 => t('2') ,
-                        3 => t('3') ,
-                        4 => t('4')
-                    )
-                );
-                $form['field_match']['csv_user_column'][$key]['abbreviate'] = array(
-                    '#type' => 'checkbox',
-                    '#default_value' => 0
-                );
-            }
-        }
-        $form['options'] = array(
-            '#type' => 'details',
-            '#title' => $this->t('OPTIONS') ,
-            '#open' => true
-        );
-        $form['options']['send_email'] = array(
-            '#type' => 'checkbox',
-            '#title' => $this->t('Send Email') ,
-            '#description' => $this->t("Send email to users when their account is created.") ,
-            '#default_value' => $this
-                ->store
-                ->get('send_email') ? $this
-                ->store
-                ->get('send_email') : ''
-        );
-        $form['options']['username_space'] = array(
-            '#type' => 'checkbox',
-            '#title' => $this->t('Username Space') ,
-            '#description' => $this->t("Include spaces in usernames, e.g. 'John' + 'Smith' => 'John Smith'.") ,
-            '#default_value' => $this
-                ->store
-                ->get('username_space') ? $this
-                ->store
-                ->get('username_space') : ''
-        );
-        $form['options']['activate_accounts'] = array(
-            '#type' => 'checkbox',
-            '#title' => $this->t('Activate Accounts') ,
-            '#description' => $this->t("User accounts will not be visible to other users until their owner logs in. Select this option to make all imported user accounts visible. Note - one time login links in welcome emails will no longer work if this option is enabled.") ,
-            '#default_value' => $this
-                ->store
-                ->get('activate_accounts') ? $this
-                ->store
-                ->get('activate_accounts') : ''
-        );
-        $form['role_assign'] = array(
-            '#type' => 'details',
-            '#title' => $this->t('ROLE ASSIGN') ,
-            '#open' => true
-        );
-        $form['role_assign']['override_role'] = ['#type' => 'radios', '#options' => ['1' => 'True', '0' => 'False', ], '#default_value' => '0', '#title' => $this->t('Override Role From CSV') , '#size' => 40, '#description' => $this->t('Override role from CSV and create role if not exist in Durpal.') , ];
-        $form['email_message'] = array(
-            '#type' => 'details',
-            '#title' => $this->t('EMAIL MESSAGE') ,
-            '#open' => true
-        );
-        $form['email_message']['message_subject'] = array(
-            '#type' => 'textfield',
-            '#title' => $this->t('Message Subject') ,
-            '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:account-name], [user:mail], [site:login-url], [user:one-time-login-url]") ,
-            '#default_value' => $this
-                ->store
-                ->get('message_subject') ? $this
-                ->store
-                ->get('message_subject') : ''
-        );
-        $form['email_message']['message'] = array(
-            '#type' => 'textarea',
-            '#title' => $this->t('Message') ,
-            '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:account-name], [user:mail], [site:login-url], [user:one-time-login-url],[user:password]") ,
-            '#default_value' => $this
-                ->store
-                ->get('message') ? $this
-                ->store
-                ->get('message') : ''
-        );
-        $form['email_message']['email_format'] = array(
-            '#type' => 'radios',
-            '#options' => ['1' => 'Plain Text',
-            '0' => 'HTML',
-            ],
-            '#default_value' => '1',
-            '#title' => $this->t('Email Format') ,
-            '#size' => 40,
-        );
-        $form['actions']['previous'] = array(
-            '#type' => 'link',
-            '#title' => $this->t('Previous') ,
-            '#attributes' => array(
-                'class' => array(
-                    'button'
-                ) ,
-            ) ,
-            '#weight' => 0,
-            '#url' => Url::fromRoute('user_import.multistep_one') ,
-        );
-        return $form;
-    }
+				$group_listing = [];
 
-    /**
-     * User Import Sample CSV Creation.
-     */
-    public function userImportcallback(array &$form, FormStateInterface $form_state)
-    {
-        global $base_url;
+				foreach ($group_result as $key => $group) {
+					$current_user   = \Drupal::currentUser();
+					$group_load          = \Drupal\group\Entity\Group::load($group->id);
+			  		if ($group_load->getMember($current_user)) {
+			  			$group_listing[] = [
+					        'value' => $group->id,
+					        'label' => $group->label
+					    ];
+			  		}
+				}
 
-        $result = '';
-        $ajax_response = new AjaxResponse();
-        $group_id = $form_state->getValue('add_group');
-        $current_user = \Drupal::currentUser();
-        $group = \Drupal\group\Entity\Group::load($group_id);
-        $group_type = $group->bundle();
+				$form['group']['add_group'] = [
+			      '#type' => 'textfield',
+			      '#title' => $this->t('Enter group name'),
+			      '#autocomplete_route_name' => 'user_import.autocomplete',
+			      '#size' => 20,
+				  	'#ajax' => [
+				        'event' => 'autocompleteclose',
+				        'callback' => '::userImportcallback',
+				        'wrapper' => 'user_import_fields_change_wrapper',
+				        'progress' => [
+				          'type' => 'throbber',
+				          'message' => $this->t('Verifying permission...'),
+				        ],
+			    	],
+			    ];
 
-        if ($group->getMember($current_user)) {
-            // User is a member...
-            $group_roles = \Drupal::entityTypeManager()->getStorage('group_role')
-                ->loadByProperties(['group_type' => $group_type, 'internal' => false, ]);
-            $role_names = [];
-            foreach ($group_roles as $role_id => $group_role) {
-                if (!$group_role->isInternal()) {
-                    // checks if you created this role.
-                    $role_names[$role_id] = $group_role->label();
-                }
-            }
+		        $form['group']['add_role'] = array(
+					'#type' => 'select',
+					'#title' => $this->t('Select role/roles'),
+					'#prefix' => '<div id="first">',
+					'#suffix' => '</div>',
+					'#default_value' => 0,
+					'#validated' => True,
+					'#options' => array( 0 => '------------------'),
+				);
 
-            if (count($role_names) > 0) {
-                $form['group']['add_role']['#options'] = $role_names;
-            } else {
-                $form['group']['add_role']['#options'] = array(
-                    0 => '------------------'
-                );
-            }
-            $form_state->setRebuild(true);
-            $ajax_response->addCommand(new HtmlCommand("#user_import_fields_change_wrapper", ''));
-            $ajax_response->addCommand(new HtmlCommand("#first", ($form['group']['add_role'])));
-            return $ajax_response;
-        } else {
-            $role = 'You do not have permission to add member in this group.';
-            $form['group']['add_role']['#options'] = array(
-                0 => '------------------'
-            );
-            $ajax_response->addCommand(new HtmlCommand("#first", ($form['group']['add_role'])));
-            $ajax_response->addCommand(new HtmlCommand('#user_import_fields_change_wrapper', $role));
-            return $ajax_response;
-        }
-    }
+		        $form['group']['import_ct_markup'] = [
+			    	'#suffix' => '<div id="user_import_fields_change_wrapper"></div>',
+			    ];
+			}
+		}
 
-    /**
-     * {@inheritdoc}
-     */
-    public function submitForm(array &$form, FormStateInterface $form_state)
-    {
+
+		if ($moduleHandler->moduleExists('profile')){
+
+			$database = \Drupal::database();
+			$profile_type_query = $database->query("SELECT value FROM key_value WHERE collection LIKE '%profile%'");
+			$profile_type_result = $profile_type_query->fetchAll();
+
+			$profile_type = array();
+
+			foreach ($profile_type_result as $key => $type) {
+				$profile_type_value = unserialize($profile_type_result[$key]->value);
+				$explode_dot_profile = explode('.', $profile_type_value[0]);
+				$profile_type[0] = $this->t('---------------');
+				$profile_type[$explode_dot_profile[2]] = $explode_dot_profile[2];
+			}
+
+			$profile_field_count = [];
+
+			foreach ($file_data[0] as $key => $value) {
+		    	if (strpos($value, 'field_') !== false) {
+		    		$profile_field_count[] = $value;
+		    	}
+		    }
+
+		    if(count($profile_field_count) > 0){
+				$form['profile_type_field'] = array(
+				    '#type' => 'details',
+				    '#title' => $this->t('PROFILE TYPES'),
+				    '#description' => $this->t('When you mapping profile fields, it must be within the profile type.'),
+				    '#open' => TRUE
+			    );
+
+
+				// Add the headers.
+			    $form['profile_type_field']['profile_csv_user_column'] = array(
+			        '#type' => 'table',
+			        '#title' => 'Sample Table',
+			        '#header' => array('CSV COLUMN', 'PROFILE TYPE'),
+			    );
+
+			    foreach ($file_data[0] as $key => $user_value) {
+			    	if(!empty($user_value)){
+				    	if (strpos($user_value, 'user__') !== false) {
+
+				    	} else if (strpos($user_value, 'field_') !== false) {
+
+						    $form['profile_type_field']['profile_csv_user_column'][$key]['profile_csv_column'] = array(
+					            '#type' => 'textfield',
+					            '#title' => t('CSV COLUMN'),
+					            '#title_display' => 'invisible',
+					            '#default_value' => $user_value,
+					            '#size' => 20,
+					            '#attributes' => array('disabled' => 'disabled', 'class' => array('csv_column_text') ),
+					        );
+
+					        $form['profile_type_field']['profile_csv_user_column'][$key]['profile_field'] = array(
+					            '#type' => 'select',
+					            '#title' => t('PROFILE TYPE'),
+					            '#title_display' => 'invisible',
+					            '#default_value' => 0,
+					            '#options' => $profile_type
+					        );
+						}
+					}   
+			    }
+			} 
+		}
+
+	    $form['csv_file_data'] = array(
+	        '#type' => 'hidden',
+	        '#title' => 'Sample Column',
+	        '#title_display' => 'invisible',
+	        '#value' => array('csv_file_data' => $file_data),
+	    );
+
+	    $form['options'] = array(
+	    	'#type' => 'details',
+	    	'#title' => $this->t('OPTIONS'),
+	    	'#open' => TRUE
+	    );
+
+	    $form['options']['send_email'] = array(
+		    '#type' => 'checkbox',
+		    '#title' => $this->t('Send Email'),
+		    '#description' => $this->t("Send email to users when their account is created."),
+		    '#default_value' => $this->store->get('send_email') ? $this->store->get('send_email') : ''
+	    );
+
+	    $form['role_assign'] = array(
+		    '#type' => 'details',
+		    '#title' => $this->t('ROLE ASSIGN'),
+		    '#open' => TRUE
+	    );
+
+	    $form['role_assign']['override_role'] = [
+		    '#type' => 'radios',
+		    '#options' => [
+		        '1' => 'True',
+		        '0' => 'False',
+		    ],
+		    '#default_value' => '0',
+		    '#title' => $this->t('Override Role From CSV'),
+		    '#size' => 40,
+		    '#description' => $this->t('Override role from CSV and create role if not exist in Durpal.'),
+	    ];
+
+	    $form['email_message'] = array(
+		    '#type' => 'details',
+		    '#title' => $this->t('EMAIL MESSAGE'),
+		    '#open' => TRUE
+	    );
+
+	    $form['email_message']['message_subject'] = array(
+		    '#type' => 'textfield',
+		    '#title' => $this->t('Message Subject'),
+		    '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:mail], [site:login-url], [user:one-time-login-url]"),
+		    '#default_value' => $this->store->get('message_subject') ? $this->store->get('message_subject') : ''
+	    );
+
+	    $form['email_message']['message'] = array(
+		    '#type' => 'text_format',
+		    '#title' => $this->t('Message'),
+		    '#format' => 'full_html',
+		    '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:mail], [site:login-url], [user:one-time-login-url],[user:password]"),
+		    '#default_value' => $this->store->get('message') ? $this->store->get('message') : ''
+	    );
+
+	    $form['second_email_message'] = array(
+		    '#type' => 'details',
+		    '#title' => $this->t('EMAIL MESSAGE FOR EXISTING ACCOUNT'),
+		    '#open' => TRUE
+	    );
+
+	    $form['second_email_message']['second_message_subject'] = array(
+		    '#type' => 'textfield',
+		    '#title' => $this->t('Message Subject'),
+		    '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:mail], [site:login-url], [user:one-time-login-url]"),
+		    '#default_value' => $this->store->get('message_subject') ? $this->store->get('message_subject') : ''
+	    );
+
+	    $form['second_email_message']['second_message'] = array(
+		    '#type' => 'text_format',
+		    '#title' => $this->t('Message'),
+		    '#format' => 'full_html',
+		    '#description' => $this->t("Customize the subject of the welcome e-mail, which is sent to imported members.  Available variables are: [site:name], [site:url], [user:display-name], [user:mail], [site:login-url], [user:one-time-login-url],[user:password]"),
+		    '#default_value' => $this->store->get('message') ? $this->store->get('message') : ''
+	    );
+
+	    $form['actions']['previous'] = array(
+		    '#type' => 'link',
+		    '#title' => $this->t('Previous'),
+		    '#attributes' => array(
+		        'class' => array('button'),
+		    ),
+		    '#weight' => 0,
+		    '#url' => Url::fromRoute('user_import.multistep_one'),
+	    );
+
+	    return $form;
+  	}
+
+
+  	/**
+   	* User Import Sample CSV Creation.
+   	*/
+  	public function userImportcallback(array &$form, FormStateInterface $form_state) {
+	    global $base_url;
+
+	    $result = '';
+	    $ajax_response = new AjaxResponse();
+	    $group_explode = explode('-', $form_state->getValue('add_group'));
+	    $group_id = $group_explode[1];
+
+  		$current_user   = \Drupal::currentUser();
+  		$group          = \Drupal\group\Entity\Group::load($group_id);
+  		$group_type     = $group->bundle();
+
+  		if ($group->getMember($current_user)) {
+			// User is a member...
+			$group_roles = \Drupal::entityTypeManager()->getStorage('group_role')->loadByProperties([
+		      'group_type' => $group_type,
+		      'internal' => FALSE,
+		    ]);
+
+			$role_names = [];
+
+		    foreach ($group_roles as $role_id => $group_role) {
+			    if(!$group_role->isInternal()) { // checks if you created this role.
+			    	$role_names[0] = '------------------';
+				    $role_names[$role_id] = $group_role->label();
+			    }
+		    }
+		    
+	    	if(count($role_names) > 0){
+	    		$form['group']['add_role']['#options'] = $role_names;
+	    	}
+			
+			$form_state->setRebuild(TRUE);
+
+
+			$ajax_response->addCommand(new HtmlCommand("#user_import_fields_change_wrapper", ''));
+			$ajax_response->addCommand(new HtmlCommand("#first", ($form['group']['add_role'])));
+			return $ajax_response;
+		}else{
+			$role = 'You do not have permission to add member in this group.';
+
+			$form['group']['add_role']['#options'] = array(0 => '------------------');
+
+			$ajax_response->addCommand(new HtmlCommand("#first", ($form['group']['add_role'])));
+		    $ajax_response->addCommand(new HtmlCommand('#user_import_fields_change_wrapper', $role));
+		    return $ajax_response;
+		}
+    	
+    	
+  	}
+
+
+  	/**
+   	* {@inheritdoc}
+   	*/
+  	public function submitForm(array &$form, FormStateInterface $form_state) {
         global $base_url;
 
         $values = $form_state->getValues();
-        $message = $values['message'];
-        $email_format = $values['email_format'];
+        $message = $values['message']['value'];
+        $email_format = 0;
         $message_subject = $values['message_subject'];
-        $add_role = $values['add_role'];
-        $send_email = $values['send_email'];
-        $username_space = $values['username_space'];
-        $activate_accounts = $values['activate_accounts'];
-        $override_role = $values['override_role'];
-        $csv_file_data = $values['csv_file_data']['csv_file_data'];
-        $csv_column_count = $values['csv_column_count'];
-        $csv_user_column = $values['csv_user_column'];
-        $drupal_fields_array = [];
+	    $add_role = $values['add_role'];
 
-        foreach ($csv_user_column as $key => $value) {
-            if ($csv_user_column[$key]['drupal_fields'] == 0) {
-                $drupal_fields_array[] = $csv_user_column[$key]['drupal_fields'];
-            }
-        }
+	    // Second email message for existing account
+	    $second_message = $values['second_message'];
+        $second_email_format = 0;
+        $second_message_subject = $values['second_message_subject'];
 
-        $drupal_fields_count = count($drupal_fields_array);
-        if ($drupal_fields_count == $csv_column_count) {
-            drupal_set_message($this->t('One column of the csv file must be set as the email address.'), 'error');
-            return;
-        }
+	    $send_email = $values['send_email'];
+	    $override_role = $values['override_role'];
 
-        $fieldNames = [];
-        $keyIndex = [];
-        $arrange_username = [];
-        $concat_username = [];
-        $user_data = [];
-        $test = [];
+	    $csv_file_data = $values['csv_file_data']['csv_file_data'];
+	    $extra_account_fields = [];
 
-        foreach ($csv_user_column as $key => $value) {
-            if ($value['username'] == 0) {
-                $csv_user_column_username[] = $value['username'];
-            }
-        }
-        foreach ($csv_file_data[0] as $key => $csv_header) {
-            $fieldNames[] = $csv_header;
-        }
-        foreach ($csv_file_data as $key => $user_value) {
-            foreach ($user_value as $key => $value) {
-                if ($fieldNames[$key] != $value) {
-                    $keyIndex[$fieldNames[$key]] = $value;
-                }
-            }
-            $user_index[] = $keyIndex;
-        }
-        $user_data = array_filter($user_index);
+	    foreach ($csv_file_data[0] as $key => $value) {
+	    	if (strpos($value, 'user__') !== false) {
+	    		$extra_account_fields[] = $value;
+	    	}
+	    }
 
-        foreach ($csv_user_column as $key => $u_value) {
-            if ($u_value['username'] != 0) {
-                $arrange_username[$u_value['csv_column']] = $u_value['username'];
-            }
-        }
-        foreach ($csv_user_column as $key => $u_value) {
-            if ($u_value['abbreviate'] == 1) {
-                $abbreviate[] = $u_value['csv_column'];
-            }
-        }
+	    $fieldNames = [];
+	    $keyIndex = [];
+	    $user_data = [];
 
-        $array = $arrange_username;
-        $counts = array_count_values($array);
-        $filtered = array_filter($array, function ($value) use ($counts) {
-            return $counts[$value] > 1;
-        });
-        $username_fields_count = count($csv_user_column_username);
-        if ($username_fields_count == $csv_column_count) {
-            if (count($abbreviate) > 0) {
-                foreach ($user_data as $u_key => $value) {
-                    foreach ($abbreviate as $key => $abbr_value) {
-                        $user_data[$u_key][$abbr_value] = ucfirst($value[$abbr_value]);
-                    }
-                }
-            } else {
-                foreach ($user_data as $u_key => $value) {
-                    if ($username_space == 1) {
-                        $user_data[$u_key]['username'] .= ucfirst($value['name']);
-                    } else {
-                        $string = str_replace(' ', '', $value['name']);
-                        $user_data[$u_key]['username'] .= ucfirst($string);
-                    }
-                }
-            }
-        } else {
-            foreach ($user_data as $u_key => $u_value) {
-                if (count($filtered) > 0) {
-                    foreach ($arrange_username as $key => $value) {
-                        if (in_array($key, $abbreviate)) {
-                            $user_data[$u_key]['username'] .= ucfirst($u_value[$key]);
-                        } else {
-                            $user_data[$u_key]['username'] .= $u_value[$key];
-                        }
-                    }
-                } else {
-                    if (count($arrange_username) > 0) {
-                        $field1 = array_search(1, $arrange_username);
-                        $field2 = array_search(2, $arrange_username);
-                        $field3 = array_search(3, $arrange_username);
-                        $field4 = array_search(4, $arrange_username);
+	    
+	    foreach ($csv_file_data[0] as $key => $csv_header) {
+	    	$fieldNames[] = $csv_header;
+	    }
+	    foreach ($csv_file_data as $key => $user_value) {
+		    foreach ($user_value as $key => $value) {
+			   	if ($fieldNames[$key] != $value) {
+			    	$keyIndex[$fieldNames[$key]] = $value;
+			    }
+		    }
+		    $user_index[] = $keyIndex;
+	    }
+	    $user_data = array_filter($user_index);
 
-                        if (in_array(1, $arrange_username)) {
-                            if (in_array($field1, $abbreviate)) {
-                                if ($username_space == 1) {
-                                    if ($field1 == 'name') {
-                                        $user_data[$u_key]['username'] .= ucfirst($u_value[$field1]);
-                                    } else {
-                                        $string = str_replace(' ', '', $u_value[$field1]);
-                                        $user_data[$u_key]['username'] .= ucfirst($string);
-                                    }
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field1]);
-                                    $user_data[$u_key]['username'] .= ucfirst($string);
-                                }
-                            } else {
-                                if ($username_space == 1) {
-                                    $user_data[$u_key]['username'] .= $u_value[$field1];
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field1]);
-                                    $user_data[$u_key]['username'] .= $string;
-                                }
-                            }
-                        }
+	    $profile_csv_user_column= [];
 
-                        if (in_array(2, $arrange_username)) {
-                            if (in_array($field2, $abbreviate)) {
-                                if ($username_space == 1) {
-                                    if ($field2 == 'name') {
-                                        $user_data[$u_key]['username'] .= ucfirst($u_value[$field2]);
-                                    } else {
-                                        $string = str_replace(' ', '', $u_value[$field2]);
-                                        $user_data[$u_key]['username'] .= ucfirst($string);
-                                    }
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field2]);
-                                    $user_data[$u_key]['username'] .= ucfirst($string);
-                                }
-                            } else {
-                                if ($username_space == 1) {
-                                    $user_data[$u_key]['username'] .= $u_value[$field2];
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field2]);
-                                    $user_data[$u_key]['username'] .= $string;
-                                }
-                            }
-                        }
+	    if(!empty($values['profile_csv_user_column'])){
+	    	$profile_csv_user_column = $values['profile_csv_user_column'];
+	    }
 
-                        if (in_array(3, $arrange_username)) {
-                            if (in_array($field3, $abbreviate)) {
-                                if ($username_space == 1) {
-                                    if ($field3 == 'name') {
-                                        $user_data[$u_key]['username'] .= ucfirst($u_value[$field3]);
-                                    } else {
-                                        $string = str_replace(' ', '', $u_value[$field3]);
-                                        $user_data[$u_key]['username'] .= ucfirst($string);
-                                    }
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field3]);
-                                    $user_data[$u_key]['username'] .= ucfirst($string);
-                                }
-                            } else {
-                                if ($username_space == 1) {
-                                    $user_data[$u_key]['username'] .= $u_value[$field3];
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field3]);
-                                    $user_data[$u_key]['username'] .= $string;
-                                }
-                            }
-                        }
+	    // Get current user language.
+	    $language = \Drupal::languageManager()->getCurrentLanguage()->getId();
+	    foreach ($user_data as $value) {
+	    	$user_status = user_load_by_mail($value['email']);
+	    	if (empty($user_status)) {
+	    		// Create new user
+	    		$user = User::create();
+		        $user->uid = '';
+		        $user->setUsername($value['name']);
+		        $user->setEmail($value['email']);
+		        $user->set("init", $value['email']);
+		        $user->setPassword($value['pass']);
+		        $user->enforceIsNew();
 
-                        if (in_array(4, $arrange_username)) {
-                            if (in_array($field4, $abbreviate)) {
-                                if ($username_space == 1) {
-                                    if ($field4 == 'name') {
-                                        $user_data[$u_key]['username'] .= ucfirst($u_value[$field4]);
-                                    } else {
-                                        $string = str_replace(' ', '', $u_value[$field4]);
-                                        $user_data[$u_key]['username'] .= ucfirst($string);
-                                    }
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field4]);
-                                    $user_data[$u_key]['username'] .= ucfirst($string);
-                                }
-                            } else {
-                                if ($username_space == 1) {
-                                    $user_data[$u_key]['username'] .= $u_value[$field4];
-                                } else {
-                                    $string = str_replace(' ', '', $u_value[$field4]);
-                                    $user_data[$u_key]['username'] .= $string;
-                                }
-                            }
-                        }
-                    } else {
-                        foreach ($user_data as $u_key => $value) {
-                            if ($username_space == 1) {
-                                $user_data[$u_key]['username'] = ucfirst($value['name']);
-                            } else {
-                                $string = str_replace(' ', '', $value['name']);
-                                $user_data[$u_key]['username'] = ucfirst($string);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+		        if(!empty($value['status'])){
+		        	$user->set("status", $value['status']);
+		        }
 
-        $profile_csv_user_column = $values['profile_csv_user_column'];
+		        if(!empty($value['langcode'])){
+		        	$user->set("langcode", $value['langcode']);
+			        $user->set("preferred_langcode", $value['langcode']);
+			        $user->set("preferred_admin_langcode", $value['langcode']);
+		        } else {
+		        	$user->set("langcode", $language);
+			        $user->set("preferred_langcode", $language);
+			        $user->set("preferred_admin_langcode", $language);
+		        }
+		        
+		        if(!empty($value['timezone'])){
+			        //- Set Time Zone to London 
+					$user->set('timezone',$value['timezone']);
+				} else{
+					$system_site_config = \Drupal::config('system.date');
+      				$default_timezone = $system_site_config->get('timezone')['default'];
+					$user->set('timezone',$default_timezone);
+				}
+		        
+		        if (((int) $override_role == 1)) {
+	        		// List out all roles.
+		            $list_of_roles = user_role_names();
+		            $user_role = str_replace(' ', '_', $value['role']);
+		            if (!in_array($user_role, $list_of_roles) && (array_key_exists($user_role, $list_of_roles) === FALSE)) {
 
-        // Get current user language.
-        $language = \Drupal::languageManager()->getCurrentLanguage()
-            ->getId();
-        foreach ($user_data as $value) {
-            $user_status = user_load_by_mail($value['email']);
-            if (empty($user_status)) {
-                // Create new user
-                $user = User::create();
-                $user->uid = '';
-                $user->setUsername($value['username']);
-                $user->setEmail($value['email']);
-                $user->set("init", $value['email']);
-                $user->set("langcode", $language);
-                $user->set("preferred_langcode", $language);
-                $user->set("preferred_admin_langcode", $language);
-                $user->set("status", $value['status']);
-                $user->setPassword($value['pass']);
-                $user->enforceIsNew();
-
-                if ($activate_accounts == 1) {
-                    $user->activate();
-                }
-
-                if (((int)$override_role == 1)) {
-                    // List out all roles.
-                    $list_of_roles = user_role_names();
-                    $user_role = str_replace(' ', '_', $value['role']);
-                    if (!in_array($user_role, $list_of_roles) && (array_key_exists($user_role, $list_of_roles) === false)) {
-                        if (strpos($value['role'], ',') !== false) {
-                            $comma_separated_role = explode(',', $value['role']);
-                            foreach ($comma_separated_role as $urole) {
-                                if (array_key_exists($urole, $list_of_roles)) {
-                                    $user->addRole($urole);
-                                } else {
-                                    // Create Role.
-                                    $role = Role::create(['id' => str_replace(' ', '_', strtolower($urole)) , 'label' => str_replace('_', ' ', ucwords($urole)) , ]);
-                                    $role->save();
-                                    // New role created and assign to user.
-                                    $user->addRole($role->id());
-                                }
-                            }
-                        } else {
-                            // Create Role.
-                            $role = Role::create(['id' => str_replace(' ', '_', strtolower($user_role)) , 'label' => str_replace('_', ' ', ucwords($value['role'])) , ]);
-                            $role->save();
-                            // New role created and assign to user.
-                            $user->addRole($role->id());
-                        }
-                    } else {
-                        // If role is exist in drupal.
-                        $user->addRole($user_role);
-                    }
-                } else {
+		            	if (strpos($value['role'], ',') !== false) {
+		            		$comma_separated_role = explode(',',$value['role']);
+		            		foreach ($comma_separated_role as $urole) {
+		            			if(array_key_exists($urole, $list_of_roles)){
+		            				$user->addRole($urole);
+		            			}else{
+		            				// Create Role.
+					              	$role = Role::create([
+					                	'id' => str_replace(' ', '_', strtolower($urole)),
+					                	'label' => str_replace('_', ' ', ucwords($urole)),
+					              	]);
+					              	$role->save();
+					              	// New role created and assign to user.
+					              	$user->addRole($role->id());
+		            			}
+		            		}
+		            	}else{
+		            		// Create Role.
+			              	$role = Role::create([
+			                	'id' => str_replace(' ', '_', strtolower($user_role)),
+			                	'label' => str_replace('_', ' ', ucwords($value['role'])),
+			              	]);
+			              	$role->save();
+			              	// New role created and assign to user.
+			              	$user->addRole($role->id());
+		            	}
+		              	
+		            }
+		            else {
+		              	// If role is exist in drupal.
+		              	$user->addRole($user_role);
+		            }
+		        }else{
                     // Assign role to user for anonymous and authenticate.
                     $user->addRole('authenticate');
                 }
                 $user->save();
 
+
+                // Account extra fields
+                if(count($extra_account_fields) > 0){
+		        	$users = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $value['email']]);
+		    		$user = reset($users);
+		    		if ($user) {
+		    			$uid = $user->id();
+			        	foreach ($extra_account_fields as $account_key => $account_value) {
+			        		$trimmed = '';
+			        		$subject = $account_value;
+							$search = 'user__' ;
+							$trimmed = str_replace($search, '', $subject);
+							$url = $value[$account_value];
+
+			        		if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
+
+								// Get the image name from url
+								$link_array = explode('/',$url);
+								$image_name = end($link_array);
+
+								$path = 'public://account_images/'; // Directory to file save.
+								file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+
+								// Create file entity.
+								$file = File::create([
+								  'uid' => $uid,
+								  'filename' => $image_name,
+								  'uri' => $path.$image_name,
+								  'status' => 1,
+								]);
+								file_put_contents($file->getFileUri(), file_get_contents($url));
+								$file->save();
+
+				        		$user->set($trimmed, $file);
+							} else {
+				        		$user->set($trimmed, $value[$account_value]);
+							}
+			        	}
+			        }
+			        $user->save();
+		        }
+
                 // Notify to user via mail.
-                if (($send_email == 1) || ($activate_accounts == 1)) {
+                if( ($send_email == 1) ){
                     _user_mail_notify('register_no_approval_required', $user);
                 }
 
                 // Send template email.
-                if (!empty($message_subject) && !empty($message)) {
-                    $this->sendTemplateEmail($value, $message_subject, $message, $email_format);
+                if(!empty($message_subject) && !empty($message)){
+                	$this->send_template_email($value,$message_subject,$message,$email_format);
                 }
 
-                // Add members in a group
-                $moduleHandler = \Drupal::service('module_handler');
-                if ($moduleHandler->moduleExists('group')) {
-                    $group_id = $values['add_group'];
-                    $group_roles = $values['add_role'];
-                    if (!empty($group_id) && !empty($group_roles)) {
-                        if (($group_id != 0) && ($group_roles != '')) {
-                            // Insert the record to table.
-                            $roles = array(
-                                $group_roles
-                            );
-                            $this->adMember($roles, $group_id, $value['email']);
-                        }
-                    }
-                }
+            	// Add members in a group
+            	$moduleHandler = \Drupal::service('module_handler');
+				if ($moduleHandler->moduleExists('group')){
 
-                // Add profile data
-                if ($moduleHandler->moduleExists('profile')) {
-                    $users = \Drupal::entityTypeManager()->getStorage('user')
-                        ->loadByProperties(['mail' => $value['email']]);
-                    $user = reset($users);
-                    if ($user) {
-                        $uid = $user->id();
+					if(!empty($values['add_group'])){
+						$group_explode = explode('-', $values['add_group']);
+		    			$group_id = $group_explode[1];
+						$group_roles = $values['add_role'];
 
-                        if (count($profile_csv_user_column) > 0) {
-                            foreach ($profile_csv_user_column as $profile_key => $profile_value) {
-                                $field_name = $profile_csv_user_column[$profile_key]['profile_csv_column'];
-                                $profile_type = $profile_csv_user_column[$profile_key]['profile_field'];
-                                $url = $value[$profile_csv_user_column[$profile_key]['profile_csv_column']];
-                                $list = \Drupal::entityTypeManager()->getStorage('profile')
-                                    ->loadByProperties(['uid' => $uid, 'type' => $profile_type, ]);
+						if(!empty($group_id) && !empty($group_roles)){
+							if( ($group_id != 0) && ($group_roles != '')){
+								// Insert the record to table.
+								$roles = array($group_roles);
+								
+								$this->add_member($roles,$group_id,$value['email']);
+							}
+						} elseif(!empty($group_id)) {
+							$this->add_member_without_role($group_id,$value['email']);
+						}
+					}
+				}
 
-                                if (count($list) > 0) {
-                                    $activeProfile = [];
-                                    $activeProfile = \Drupal::getContainer()->get('entity_type.manager')
-                                        ->getStorage('profile')
-                                        ->loadByUser(User::load($uid), $profile_type);
-                                    if (count($activeProfile) > 0) {
-                                        $profile_id = $activeProfile->id();
 
-                                        if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                            // Get the image name from url
-                                            $link_array = explode('/', $url);
-                                            $image_name = end($link_array);
+				// Add profile data
+				if ($moduleHandler->moduleExists('profile')){
+					$users = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $value['email']]);
+		    		$user = reset($users);
+		    		if ($user) {
+		    			$uid = $user->id();
 
-                                            $path = 'public://profile_images/'; // Directory to file save.
-                                            file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+		    			if(count($profile_csv_user_column) > 0){
+		    				foreach ($profile_csv_user_column as $profile_key => $profile_value) {
 
-                                            // Create file entity.
-                                            $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                            file_put_contents($file->getFileUri(), file_get_contents($url));
-                                            $file->save();
+								$field_name = $profile_csv_user_column[$profile_key]['profile_csv_column'];
+								$profile_type = $profile_csv_user_column[$profile_key]['profile_field'];
+								$url = $value[$profile_csv_user_column[$profile_key]['profile_csv_column']];
 
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $file);
-                                            $profile->save();
-                                        } else {
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
-                                            $profile->save();
-                                        }
-                                    } else {
-                                        if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                            // Get the image name from url
-                                            $link_array = explode('/', $url);
-                                            $image_name = end($link_array);
+								$database = \Drupal::database();
+								$profile_type_query = $database->query("SELECT name FROM config WHERE name LIKE '%field.field.profile.".$profile_type.".".$field_name."%'");
+								$profile_type_result = $profile_type_query->fetchAll();
 
-                                            $path = 'public://profile_images/'; // Directory to file save.
-                                            file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+								if(count($profile_type_result) > 0){
+									$lists = [];
+									$lists = \Drupal::entityTypeManager()
+											  ->getStorage('profile')
+											  ->loadByProperties([
+											    'uid' => $uid,
+											    'type' => $profile_type,
+											  ]);
 
-                                            // Create file entity.
-                                            $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                            file_put_contents($file->getFileUri(), file_get_contents($url));
-                                            $file->save();
+									if(count($lists) > 0){
+									    foreach ($lists as $lkey => $list) {
+											$profile_id = $list->id();
 
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $file);
-                                            $profile->save();
-                                        } else {
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
-                                            $profile->save();
-                                        }
-                                    }
-                                } else {
-                                    if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                        // Get the image name from url
-                                        $link_array = explode('/', $url);
-                                        $image_name = end($link_array);
+											if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
 
-                                        $path = 'public://profile_images/'; // Directory to file save.
-                                        file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+												// Get the image name from url
+												$link_array = explode('/',$url);
+												$image_name = end($link_array);
 
-                                        // Create file entity.
-                                        $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                        file_put_contents($file->getFileUri(), file_get_contents($url));
-                                        $file->save();
+												$path = 'public://profile_images/'; // Directory to file save.
+												file_prepare_directory($path, FILE_CREATE_DIRECTORY);
 
-                                        $profile = Profile::create(['type' => $profile_csv_user_column[$profile_key]['profile_field'], 'uid' => $uid, $profile_csv_user_column[$profile_key]['profile_csv_column'] => $file, ]);
-                                        $profile->setDefault(true);
-                                        $profile->save();
-                                    } else {
-                                        $profile = Profile::create(['type' => $profile_csv_user_column[$profile_key]['profile_field'], 'uid' => $uid, $profile_csv_user_column[$profile_key]['profile_csv_column'] => $value[$profile_csv_user_column[$profile_key]['profile_csv_column']], ]);
-                                        $profile->setDefault(true);
-                                        $profile->save();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Update user if already exist.
-                $users = \Drupal::entityTypeManager()->getStorage('user')
-                    ->loadByProperties(['mail' => $value['email']]);
-                $user = reset($users);
-                if ($user) {
-                    $uid = $user->id();
-                    $user->setUsername($value['username']);
-                    $user->setEmail($value['email']);
-                    $user->set("langcode", $language);
-                    $user->set("preferred_langcode", $language);
-                    $user->set("preferred_admin_langcode", $language);
-                    $user->set("status", $value['status']);
-                    $user->setPassword($value['pass']);
+												// Create file entity.
+												$file = File::create([
+												  'uid' => $uid,
+												  'filename' => $image_name,
+												  'uri' => $path.$image_name,
+												  'status' => 1,
+												]);
+												file_put_contents($file->getFileUri(), file_get_contents($url));
+												$file->save();
 
-                    if (((int)$override_role == 1)) {
-                        // List out all roles.
-                        $list_of_roles = user_role_names();
-                        $user_role = str_replace(' ', '_', $value['role']);
-                        if (!in_array($user_role, $list_of_roles) && (array_key_exists($user_role, $list_of_roles) === false)) {
-                            if (strpos($value['role'], ',') !== false) {
-                                $comma_separated_role = explode(',', $value['role']);
-                                foreach ($comma_separated_role as $urole) {
-                                    if (array_key_exists($urole, $list_of_roles)) {
-                                        $user->addRole($urole);
-                                    } else {
-                                        // Create Role.
-                                        $role = Role::create(['id' => str_replace(' ', '_', strtolower($urole)) , 'label' => str_replace('_', ' ', ucwords($urole)) , ]);
-                                        $role->save();
-                                        // New role created and assign to user.
-                                        $user->addRole($role->id());
-                                    }
-                                }
-                            } else {
-                                // Create Role.
-                                $role = Role::create(['id' => str_replace(' ', '_', strtolower($user_role)) , 'label' => str_replace('_', ' ', ucwords($value['role'])) , ]);
-                                $role->save();
-                                // New role created and assign to user.
-                                $user->addRole($role->id());
-                            }
-                        } else {
-                            // If role is exist in drupal.
-                            $user->addRole($user_role);
-                        }
-                    } else {
-                        // Assign role to user for anonymous and authenticate.
-                        $user->addRole('authenticate');
-                    }
-                    $user->save();
+												$profile = Profile::load($profile_id);
+												$profile->setDefault(TRUE);
+												$profile->set($field_name,$file);
+												$profile->save();
+											}else{
+												$profile = Profile::load($profile_id);
+												$profile->setDefault(TRUE);
+												$profile->set($field_name,$value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
+												$profile->save();
+											}
+										}	  
+									}else{
+										if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
 
-                    $moduleHandler = \Drupal::service('module_handler');
-                    if ($moduleHandler->moduleExists('group')) {
-                        $group_id = $values['add_group'];
-                        $group_roles = $values['add_role'];
+											// Get the image name from url
+											$link_array = explode('/',$url);
+											$image_name = end($link_array);
 
-                        if (!empty($group_id) && !empty($group_roles)) {
-                            if (($group_id != 0) && ($group_roles != '')) {
-                                // Insert the record to table.
-                                $roles = array(
-                                    $group_roles
-                                );
+											$path = 'public://profile_images/'; // Directory to file save.
+											file_prepare_directory($path, FILE_CREATE_DIRECTORY);
 
-                                $this->adMember($roles, $group_id, $value['email']);
-                            }
-                        }
-                    }
+											// Create file entity.
+											$file = File::create([
+											  'uid' => $uid,
+											  'filename' => $image_name,
+											  'uri' => $path.$image_name,
+											  'status' => 1,
+											]);
+											file_put_contents($file->getFileUri(), file_get_contents($url));
+											$file->save();
 
-                    // Update profile fields
-                    if ($moduleHandler->moduleExists('profile')) {
-                        if (count($profile_csv_user_column) > 0) {
-                            foreach ($profile_csv_user_column as $profile_key => $profile_value) {
-                                $field_name = $profile_csv_user_column[$profile_key]['profile_csv_column'];
-                                $profile_type = $profile_csv_user_column[$profile_key]['profile_field'];
-                                $url = $value[$profile_csv_user_column[$profile_key]['profile_csv_column']];
+											$profile = Profile::create([
+											    'type' => $profile_csv_user_column[$profile_key]['profile_field'],
+											    'uid' => $uid,
+											    $profile_csv_user_column[$profile_key]['profile_csv_column'] => $file,
+											]);
+											$profile->setDefault(TRUE);
+											$profile->save();
+										}else{
+											$profile = Profile::create([
+											    'type' => $profile_csv_user_column[$profile_key]['profile_field'],
+											    'uid' => $uid,
+											    $profile_csv_user_column[$profile_key]['profile_csv_column'] => $value[$profile_csv_user_column[$profile_key]['profile_csv_column']],
+											]);
+											$profile->setDefault(TRUE);
+											$profile->save();
+										}
+									}
+								}
+							}
+		    			}
+		    		}
+	    		}
+	    	}else{
+	    		// Update user if already exist.
+	    		$users = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $value['email']]);
+	    		$user = reset($users);
+	    		if ($user) {
+	    			$uid = $user->id();
+		  			$user->setUsername($value['name']);
+	    			$user->setEmail($value['email']);
 
-                                $list = \Drupal::entityTypeManager()->getStorage('profile')
-                                    ->loadByProperties(['uid' => $uid, 'type' => $profile_type, ]);
+			        if(!empty($value['status'])){
+			        	$user->set("status", $value['status']);
+			        }
 
-                                if (count($list) > 0) {
-                                    $activeProfile = [];
-                                    $activeProfile = \Drupal::getContainer()->get('entity_type.manager')
-                                        ->getStorage('profile')
-                                        ->loadByUser(User::load($uid), $profile_type);
+			        if(!empty($value['langcode'])){
+			        	$user->set("langcode", $value['langcode']);
+				        $user->set("preferred_langcode", $value['langcode']);
+				        $user->set("preferred_admin_langcode", $value['langcode']);
+			        } else {
+			        	$user->set("langcode", $language);
+				        $user->set("preferred_langcode", $language);
+				        $user->set("preferred_admin_langcode", $language);
+			        }
+			        
+			        if(!empty($value['timezone'])){
+				        //- Set Time Zone to London 
+						$user->set('timezone',$value['timezone']);
+					} else{
+						$system_site_config = \Drupal::config('system.date');
+	      				$default_timezone = $system_site_config->get('timezone')['default'];
+						$user->set('timezone',$default_timezone);
+					}
 
-                                    if (count($activeProfile) > 0) {
-                                        $profile_id = $activeProfile->id();
-                                        if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                            // Get the image name from url
-                                            $link_array = explode('/', $url);
-                                            $image_name = end($link_array);
+				    if (((int) $override_role == 1)) {
+		        		// List out all roles.
+			            $list_of_roles = user_role_names();
+			            $user_role = str_replace(' ', '_', $value['role']);
+			            if (!in_array($user_role, $list_of_roles) && (array_key_exists($user_role, $list_of_roles) === FALSE)) {
 
-                                            $path = 'public://profile_images/'; // Directory to file save.
-                                            file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+			            	if (strpos($value['role'], ',') !== false) {
+			            		$comma_separated_role = explode(',',$value['role']);
+			            		foreach ($comma_separated_role as $urole) {
+			            			if(array_key_exists($urole, $list_of_roles)){
+			            				$user->addRole($urole);
+			            			}else{
+			            				// Create Role.
+						              	$role = Role::create([
+						                	'id' => str_replace(' ', '_', strtolower($urole)),
+						                	'label' => str_replace('_', ' ', ucwords($urole)),
+						              	]);
+						              	$role->save();
+						              	// New role created and assign to user.
+						              	$user->addRole($role->id());
+			            			}
+			            		}
+			            	}else{
+			            		// Create Role.
+				              	$role = Role::create([
+				                	'id' => str_replace(' ', '_', strtolower($user_role)),
+				                	'label' => str_replace('_', ' ', ucwords($value['role'])),
+				              	]);
+				              	$role->save();
+				              	// New role created and assign to user.
+				              	$user->addRole($role->id());
+			            	}
+			              	
+			            }
+			            else {
+			              	// If role is exist in drupal.
+			              	$user->addRole($user_role);
+			            }
+			        }else{
+	                    // Assign role to user for anonymous and authenticate.
+	                    $user->addRole('authenticate');
+	                }
 
-                                            // Create file entity.
-                                            $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                            file_put_contents($file->getFileUri(), file_get_contents($url));
-                                            $file->save();
+	                // Update account fields
+	                if(count($extra_account_fields) > 0){
+		                foreach ($extra_account_fields as $account_key => $account_value) {
+			        		$trimmed = '';
+			        		$subject = $account_value;
+							$search = 'user__' ;
+							$trimmed = str_replace($search, '', $subject);
+							$url = $value[$account_value];
 
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $file);
-                                            $profile->save();
-                                        } else {
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
-                                            $profile->save();
-                                        }
-                                    } else {
-                                        if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                            // Get the image name from url
-                                            $link_array = explode('/', $url);
-                                            $image_name = end($link_array);
+			        		if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
 
-                                            $path = 'public://profile_images/'; // Directory to file save.
-                                            file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+								// Get the image name from url
+								$link_array = explode('/',$url);
+								$image_name = end($link_array);
 
-                                            // Create file entity.
-                                            $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                            file_put_contents($file->getFileUri(), file_get_contents($url));
-                                            $file->save();
+								$path = 'public://account_images/'; // Directory to file save.
+								file_prepare_directory($path, FILE_CREATE_DIRECTORY);
 
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $file);
-                                            $profile->save();
-                                        } else {
-                                            $profile = Profile::load($profile_id);
-                                            $profile->setDefault(true);
-                                            $profile->set($field_name, $value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
-                                            $profile->save();
-                                        }
-                                    }
-                                } else {
-                                    if (preg_match('/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}' . '((:[0-9]{1,5})?\\/.*)?$/i', $url)) {
-                                        // Get the image name from url
-                                        $link_array = explode('/', $url);
-                                        $image_name = end($link_array);
+								// Create file entity.
+								$file = File::create([
+								  'uid' => $uid,
+								  'filename' => $image_name,
+								  'uri' => $path.$image_name,
+								  'status' => 1,
+								]);
+								file_put_contents($file->getFileUri(), file_get_contents($url));
+								$file->save();
 
-                                        $path = 'public://profile_images/'; // Directory to file save.
-                                        file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+				        		$user->set($trimmed, $file);
+							} else {
+				        		$user->set($trimmed, $value[$account_value]);
+							}
+			        	}
+		        	}
+	                $user->save();
 
-                                        // Create file entity.
-                                        $file = File::create(['uid' => $uid, 'filename' => $image_name, 'uri' => $path . $image_name, 'status' => 1, ]);
-                                        file_put_contents($file->getFileUri(), file_get_contents($url));
-                                        $file->save();
+	                // Send template email.
+	                if(!empty($second_message_subject) && !empty($second_message)){
+	                	$this->send_template_email($value,$second_message_subject,$second_message,$second_email_format);
+	                }
 
-                                        $profile = Profile::create(['type' => $profile_csv_user_column[$profile_key]['profile_field'], 'uid' => $uid, $profile_csv_user_column[$profile_key]['profile_csv_column'] => $file, ]);
-                                        $profile->setDefault(true);
-                                        $profile->save();
-                                    } else {
-                                        $profile = Profile::create(['type' => $profile_csv_user_column[$profile_key]['profile_field'], 'uid' => $uid, $profile_csv_user_column[$profile_key]['profile_csv_column'] => $value[$profile_csv_user_column[$profile_key]['profile_csv_column']], ]);
-                                        $profile->setDefault(true);
-                                        $profile->save();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+	                $moduleHandler = \Drupal::service('module_handler');
+					if ($moduleHandler->moduleExists('group')){
 
-        drupal_set_message($this->t('CSV users imported successfully.'), 'status');
+						if(!empty($values['add_group'])){
+							$group_explode = explode('-', $values['add_group']);
+		    				$group_id = $group_explode[1];
+							$group_roles = $values['add_role'];
+
+							if(!empty($group_id) && !empty($group_roles)){
+								if( ($group_id != 0) && ($group_roles != '')){
+									// Insert the record to table.
+									$roles = array($group_roles);
+									
+									$this->add_member($roles,$group_id,$value['email']);
+								}
+							} elseif(!empty($group_id)) {
+								$this->add_member_without_role($group_id,$value['email']);
+							}
+						}
+					}
+					
+					// Update profile fields
+					if ($moduleHandler->moduleExists('profile')){
+
+						if(count($profile_csv_user_column) > 0){
+		    				foreach ($profile_csv_user_column as $profile_key => $profile_value) {
+
+								$field_name = $profile_csv_user_column[$profile_key]['profile_csv_column'];
+								$profile_type = $profile_csv_user_column[$profile_key]['profile_field'];
+								$url = $value[$profile_csv_user_column[$profile_key]['profile_csv_column']];
+
+
+								$database = \Drupal::database();
+								$profile_type_query = $database->query("SELECT name FROM config WHERE name LIKE '%field.field.profile.".$profile_type.".".$field_name."%'");
+								$profile_type_result = $profile_type_query->fetchAll();
+
+								if(count($profile_type_result) > 0){
+									$lists = [];
+									$lists = \Drupal::entityTypeManager()
+											  ->getStorage('profile')
+											  ->loadByProperties([
+											    'uid' => $uid,
+											    'type' => $profile_type,
+											  ]);
+
+									if(count($lists) > 0){
+										foreach ($lists as $lkey => $list) {
+											$profile_id = $list->id();
+
+											if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
+
+												// Get the image name from url
+												$link_array = explode('/',$url);
+												$image_name = end($link_array);
+
+												$path = 'public://profile_images/'; // Directory to file save.
+												file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+
+												// Create file entity.
+												$file = File::create([
+												  'uid' => $uid,
+												  'filename' => $image_name,
+												  'uri' => $path.$image_name,
+												  'status' => 1,
+												]);
+												file_put_contents($file->getFileUri(), file_get_contents($url));
+												$file->save();
+
+												$profile = Profile::load($profile_id);
+												$profile->setDefault(TRUE);
+												$profile->set($field_name,$file);
+												$profile->save();
+											}else{
+												$profile = Profile::load($profile_id);
+												$profile->setDefault(TRUE);
+												$profile->set($field_name,$value[$profile_csv_user_column[$profile_key]['profile_csv_column']]);
+												$profile->save();
+											}
+										}	  
+									}else{
+										if(preg_match( '/^(http|https):\\/\\/[a-z0-9]+([\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}'.'((:[0-9]{1,5})?\\/.*)?$/i' ,$url)){
+
+											// Get the image name from url
+											$link_array = explode('/',$url);
+											$image_name = end($link_array);
+
+											$path = 'public://profile_images/'; // Directory to file save.
+											file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+
+											// Create file entity.
+											$file = File::create([
+											  'uid' => $uid,
+											  'filename' => $image_name,
+											  'uri' => $path.$image_name,
+											  'status' => 1,
+											]);
+											file_put_contents($file->getFileUri(), file_get_contents($url));
+											$file->save();
+
+											$profile = Profile::create([
+											    'type' => $profile_csv_user_column[$profile_key]['profile_field'],
+											    'uid' => $uid,
+											    $profile_csv_user_column[$profile_key]['profile_csv_column'] => $file,
+											]);
+											$profile->setDefault(TRUE);
+											$profile->save();
+										}else{
+											$profile = Profile::create([
+											    'type' => $profile_csv_user_column[$profile_key]['profile_field'],
+											    'uid' => $uid,
+											    $profile_csv_user_column[$profile_key]['profile_csv_column'] => $value[$profile_csv_user_column[$profile_key]['profile_csv_column']],
+											]);
+											$profile->setDefault(TRUE);
+											$profile->save();
+										}
+									}
+								}
+							}
+		    			}
+					}
+	    		}
+	    	}
+	    }
+
+	    drupal_set_message($this->t('CSV users imported successfully.'),'status');
 
         // Load the current user.
         $logged_in_user = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
@@ -942,123 +888,150 @@ class MultistepTwoForm extends MultistepFormBase
         $uid = $logged_in_user->get('uid')->value;
         $get_logged_in_roles = $logged_in_user->getRoles();
         $url = '';
-        if (in_array('administrator', $get_logged_in_roles)) {
+        if(in_array('administrator', $get_logged_in_roles)){
             $url = $base_url . "/admin/people";
-        } else {
+        }else{
             $url = $base_url;
         }
+	    
+	    header('Location:' . $url);
+	    exit;
+  	}
 
-        header('Location:' . $url);
-        exit;
-    }
 
-    public function sendTemplateEmail($value, $message_subject, $message, $email_format)
-    {
-        global $base_url;
+  	public function send_template_email($value, $message_subject, $message, $email_format)
+  	{
+  		global $base_url;
 
-        $site_name = \Drupal::config('system.site')->get('name');
-        $mailManager = \Drupal::service('plugin.manager.mail');
-        $module = 'user_import';
-        $key = 'create_user'; // Replace with Your key
-        $to = $value['email'];
+  		$site_name = \Drupal::config('system.site')->get('name');
+	  	$mailManager = \Drupal::service('plugin.manager.mail');
+		$module = 'user_import';
+		$key = 'create_user'; // Replace with Your key
+	    $to = $value['email'];
+	    $email = $value['email'];
 
-        $user_display_name = $value['name'];
-        $user_name = $value['username'];
 
-        if (strpos($message_subject, '[site:name]') !== false) {
-            $new_message_subject = str_replace("[site:name]", $site_name, $message_subject);
-        }
+	    $user_display_name = $value['name'];
+	    $user_name = $value['name'];
 
-        if (strpos($message, '[user:display-name]') !== false) {
-            $message = str_replace("[user:display-name]", $user_display_name, $message);
-        }
+	    if (strpos($message_subject, '[site:name]') !== false) {
+	    	$message_subject = str_replace("[site:name]",$site_name,$message_subject);
+	    }
 
-        if (strpos($message, '[user:name]') !== false) {
-            $message = str_replace("[user:name]", $user_name, $message);
-        }
+	    if (strpos($message_subject, '[user:mail]') !== false) {
+	    	$message_subject = str_replace("[user:mail]",$email,$message_subject);
+	    }
 
-        if (strpos($message, '[site:name]') !== false) {
-            $message = str_replace("[site:name]", $site_name, $message);
-        }
+	    if (strpos($message, '[user:display-name]') !== false) {
+	    	$message = str_replace("[user:display-name]",$user_display_name,$message); 
+	    }
 
-        $new_user = \Drupal::entityTypeManager()->getStorage('user')
-            ->loadByProperties(['mail' => $value['email']]);
-        $new_user = reset($new_user);
-        $uid = $new_user->id();
+	    if (strpos($message, '[user:name]') !== false) {
+	    	$message = str_replace("[user:name]",$user_name,$message); 
+	    }
 
-        // Create a timestamp.
-        $timestamp = \Drupal::time()->getRequestTime();
-        // Set the redirect location after the user of the one time login.
-        $path = '';
+	    if (strpos($message, '[site:name]') !== false) {
+	    	$message = str_replace("[site:name]",$site_name,$message); 
+	    }
 
-        // Create login link from route (Copy pasted this from the drush package)
-        $one_time_login_url = Url::fromRoute('user.reset.login', ['uid' => $uid, 'timestamp' => $timestamp, 'hash' => user_pass_rehash($new_user, $timestamp) , ], ['absolute' => true, 'query' => $path ? ['destination' => $path] : [], 'language' => \Drupal::languageManager()->getLanguage($new_user->getPreferredLangcode()) , ])
-            ->toString();
+	    if (strpos($message, '[user:mail]') !== false) {
+	    	$message = str_replace("[user:mail]",$email,$message); 
+	    }
 
-        if (strpos($message, '[user:one-time-login-url]') !== false) {
-            $message = str_replace("[user:one-time-login-url]", $one_time_login_url, $message);
-        }
+	    $new_user = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $value['email']]);
+		$new_user = reset($new_user);
+		$uid = $new_user->id();
 
-        $site_login_url = $base_url . '/user';
+		// Create a timestamp.
+		$timestamp = \Drupal::time()->getRequestTime();
+		// Set the redirect location after the user of the one time login.
+		$path = '' ;
 
-        if (strpos($message, '[site:login-url]') !== false) {
-            $message = str_replace("[site:login-url]", $site_login_url, $message);
-        }
+	    // Create login link from route (Copy pasted this from the drush package)
+		$one_time_login_url = Url::fromRoute(
+		    'user.reset.login',
+		    [
+		      'uid' => $uid,
+		      'timestamp' => $timestamp,
+		      'hash' => user_pass_rehash($new_user, $timestamp),
+		    ],
+		    [
+		      'absolute' => true,
+		      'query' => $path ? ['destination' => $path] : [],
+		      'language' => \Drupal::languageManager()->getLanguage($new_user->getPreferredLangcode()),
+		    ]
+		)->toString();
 
-        $user_password = $value['pass'];
+		if (strpos($message, '[user:one-time-login-url]') !== false) {
+	    	$message = str_replace("[user:one-time-login-url]",$one_time_login_url,$message); 
+	    }
 
-        if (strpos($message, '[user:password]') !== false) {
-            $message = str_replace("[user:password]", $user_password, $message);
-        }
+	    $site_login_url = $base_url.'/user';
 
-        $params['message_subject'] = $new_message_subject;
-        $params['message'] = $message;
-        $params['email_format'] = $email_format;
-        $params['title'] = 'Drupal 8';
-        $params['[site:name]'] = $site_name;
+	    if (strpos($message, '[site:login-url]') !== false) {
+	    	$message = str_replace("[site:login-url]",$site_login_url,$message); 
+	    }
 
-        $langcode = \Drupal::languageManager()->getCurrentLanguage()
-            ->getId();
-        $send = true;
+	    $user_password = $value['pass'];
 
-        $result = $mailManager->mail($module, $key, $to, $langcode, $params, null, $send);
-        if ($result['result'] != true) {
-            $err_message = t('There was a problem sending your email notification to @email.', array(
-                '@email' => $to
-            ));
-            \Drupal::logger('mail-log')->error($err_message);
-        }
+	    if (strpos($message, '[user:password]') !== false) {
+	    	$message = str_replace("[user:password]",$user_password,$message); 
+	    }
 
-        $success_message = t('An email notification has been sent to @email ', array(
-            '@email' => $to
-        ));
-        \Drupal::logger('mail-log')->notice($success_message);
+		$params['message_subject'] = $message_subject;
+		$params['message'] = $message;
+		$params['email_format'] = $email_format;
+		$params['title'] = $site_name;
+		$params['[site:name]'] = $site_name;
 
-        return true;
-    }
+		$langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+		$send = true;
 
-    public function adMember($roles, $group_id, $user_email)
-    {
-        // Add Member
-        $values = ['gid' => $group_id];
-        $group = \Drupal\group\Entity\Group::load($group_id);
-        $group_user = \Drupal::entityTypeManager()->getStorage('user')
-            ->loadByProperties(['mail' => $user_email]);
-        $group_user_account = reset($group_user);
-        $group->addMember($group_user_account, $values);
+		$result = $mailManager->mail($module, $key, $to, $langcode, $params, NULL, $send);
+		if ($result['result'] != true) {
+		    $err_message = t('There was a problem sending your email notification to @email.', array('@email' => $to));
+		    \Drupal::logger('mail-log')->error($err_message);
+		}
 
-        // Add roles to user
-        $member = $group->getMember($group_user_account);
-        $membership = $member->getGroupContent();
+		$success_message = t('An email notification has been sent to @email ', array('@email' => $to));
+		\Drupal::logger('mail-log')->notice($success_message);
 
-        // Get the roles of the owner
-        $member_roles = $member->getRoles();
+		return true;
+  	}
 
-        foreach ($roles as $value) {
-            if (!$member_roles[$value]) {
-                $membership->group_roles[] = $value;
-                $membership->save();
-            }
-        }
-    }
+  	public function add_member($roles,$group_id,$user_email)
+  	{
+  		// Add Member
+  		$values = ['gid' => $group_id];
+		$group = \Drupal\group\Entity\Group::load($group_id);
+		$group_user = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $user_email]);
+		$group_user_account = reset($group_user);
+		$group->addMember($group_user_account, $values);
+
+
+		// Add roles to user
+		$member = $group->getMember($group_user_account);
+		$membership = $member->getGroupContent();
+
+		// Get the roles of the owner
+		$member_roles = $member->getRoles();
+
+		foreach ($roles as $value) {
+			if(!$member_roles[$value]){
+				$membership->group_roles[] = $value;
+				$membership->save();
+			}
+		}
+  	}
+
+  	public function add_member_without_role($group_id,$user_email)
+  	{
+  		// Add Member
+  		$values = ['gid' => $group_id];
+		$group = \Drupal\group\Entity\Group::load($group_id);
+		$group_user = \Drupal::entityTypeManager()->getStorage('user')->loadByProperties(['mail' => $user_email]);
+		$group_user_account = reset($group_user);
+		$group->addMember($group_user_account, $values);
+  	}
+
 }
